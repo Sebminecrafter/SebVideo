@@ -1,0 +1,31 @@
+{
+  "name": "sebvideo",
+  "version": "1.0.0",
+  "description": "A new and cool video site",
+  "keywords": [
+    "video",
+    "website",
+    "backend",
+    "frontend",
+    "sharing",
+    "socialmedia"
+  ],
+  "homepage": "https://github.com/Sebminecrafter/SebVideo#readme",
+  "bugs": {
+    "url": "https://github.com/Sebminecrafter/SebVideo/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sebminecrafter/SebVideo.git"
+  },
+  "license": "MIT",
+  "author": "Sebminecrafter",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "node index.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
