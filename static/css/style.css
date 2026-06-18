@@ -53,15 +53,14 @@ body * * {
 }
 
 content {
-    display: block;
     flex: 1 0 auto;
 }
 
 footer {
     width: 100%;
-    background-color: rgba(0, 0, 0, 0.25);
-    color: rgb(53, 53, 53) !important;
-    min-height: 15vh;
+    background-color: rgba(0, 0, 0, 0.15);
+    min-height: 10%;
     flex-shrink: 0;
     text-align: center;
+    align-content: center;
 }
