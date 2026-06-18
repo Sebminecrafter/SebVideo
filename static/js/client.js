@@ -1,3 +1,7 @@
+var $ = function (id) {
+  return document.getElementById(id);
+};
+
 function getCookie(name) {
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
@@ -7,8 +11,7 @@ function getCookie(name) {
 function themeRefresh() {
   let theme = getCookie("theme") || "light";
   document.body.className = theme;
-  document.getElementById("toggletheme").textContent =
-    theme == "light" ? "☀︎" : "⏾";
+  $("toggletheme").textContent = theme == "light" ? "☀︎" : "⏾";
 }
 
 function toggleTheme() {
@@ -20,4 +23,7 @@ function toggleTheme() {
 
 addEventListener("DOMContentLoaded", (event) => {
   themeRefresh();
+  $("toggletheme").addEventListener("click", (event) => {
+    toggleTheme();
+  });
 });

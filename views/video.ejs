@@ -13,14 +13,8 @@ page = name;
 </div>
 <div class="riverview">
     <% for( let index = 0; index < recommended.length; index++ ) { %>
-    <% similar = recommended[index] %>
-    <div class="recommendedvideo">
-        <a href="/watch?v=<%= similar.id %>">
-            <img src="<%= similar.thumb %>" />
-            <h5><%= similar.name %></h5>
-            <p><%= similar.author %></p>
-        </a>
-    </div>
+    <% video = recommended[index] %>
+    <%- include('partials/recommendedvideo') %>
     <% } %>
 </div>
 
