@@ -52,6 +52,22 @@ body * * {
     background-color: rgba(255, 255, 255, 0.25);
 }
 
+.video {
+    padding-top: 0;
+    padding-left: 2vw;
+}
+.video video {
+    padding-top: 2vw;
+    width: 45vw;
+    height: 55vh;
+}
+
+.riverview {
+    display: flex;
+    flex-direction: column;
+    
+}
+
 content {
     flex: 1 0 auto;
 }

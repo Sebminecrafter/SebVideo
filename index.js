@@ -1,27 +1,125 @@
+//
+// Imports and setup
+//
 const express = require("express");
 const ejs = require("ejs");
-const cookieParser = require("cookie-parser");
+const fs = require("fs");
+const { isNumberObject } = require("util/types");
 
 const app = express();
-const port = 80;
-
 app.engine("ejs", ejs.renderFile);
 app.use("/static", express.static("static"));
-app.use(cookieParser());
 
 //
-// ROUTES
+// Options
 //
 
-app.get("/", (req, res) => {
-  res.render("home.ejs", { theme: req.cookies.theme || "light" });
+const port = 80;
+function defaultDetails(id) {
+  return {
+    name: `Video ${id}`,
+    author: "Unknown",
+    src: "/api/getvideo?id=" + id,
+    thumb: "/static/images/thumb.png",
+    similar: [],
+  };
+}
+
+//
+// Functions
+//
+
+function videoExists(id, next) {
+  if (next == null) {
+    next = function (err) {};
+  }
+  id = Number(id);
+  if (!Number.isNaN(id) && Number.isSafeInteger(id)) {
+    let path = "storage/meta/" + id + ".json";
+    if (fs.existsSync(path)) {
+      return true;
+    } else {
+      const err = new Error("Not Found");
+      err.code = 404;
+      next(err);
+      return false;
+    }
+  } else {
+    const err = new Error("Bad Request");
+    err.code = 400;
+    next(err);
+    return false;
+  }
+}
+
+function getVideoDetails(id, next) {
+  if (videoExists(id, next)) {
+    details = fs.readFileSync("storage/meta/" + id + ".json", {
+      encoding: "utf-8",
+    });
+    parsed = JSON.parse(details);
+    parsed.src = "/api/getVideo?id=" + id;
+    return parsed;
+  }
+  return defaultDetails(id);
+}
+
+//
+// Routes
+//
+
+// Frontend pages
+//
+
+app.get("/", (req, res, next) => {
+  let videos = [];
+  let i = 1;
+  while (true) {
+    if (!videoExists(i, null)) break;
+    let details = getVideoDetails(i, next);
+    details.id = i;
+    videos.push(details);
+    i++;
+  }
+  res.render("home.ejs", { videos });
+});
+
+app.get("/watch", (req, res, next) => {
+  let id = req.query.v;
+  if (videoExists(id, next)) {
+    const details = getVideoDetails(id, next);
+    similar = details.similar;
+    let recommended = [];
+    for (let i = 0; i < similar.length; i++) {
+      let details = getVideoDetails(similar[i], next);
+      details.id = i;
+      recommended.push(details);
+    }
+    res.render("video.ejs", { details, recommended });
+  }
+});
+
+// Backend API
+//
+
+app.get("/api/getvideo", (req, res, next) => {
+  let id = req.query.id;
+  if (videoExists(id, next)) {
+    const videoPath = "storage/videos/" + id + ".mp4";
+    res.sendFile(videoPath, { root: "." });
+  }
+});
+
+app.get("/api/details", (req, res, next) => {
+  let id = req.query.id;
+  res.send(getVideoDetails(id));
 });
 
 //
-// NON-ROUTES
+// Handling
 //
 
-// Unmatched routes -> 404
+// Unmatched routes (404)
 app.use((req, res, next) => {
   const err = new Error("Not Found");
   err.code = 404;
@@ -30,16 +128,19 @@ app.use((req, res, next) => {
 
 // Error handler (must be last)
 app.use((err, req, res, next) => {
-  const code = err.code || 500;
+  let code = err.code || 500;
   const msg = err.message || "Internal Server Error";
-  if (code != 404) console.error(err.stack);
+  if (!(code >= 400 && code < 500)) console.error(err.stack); // Console error only if it's not user-error
   res.status(code).render("error.ejs", {
     code: code,
     msg: msg,
-    theme: req.cookies.theme || "light",
   });
 });
 
+//
+// Execution
+//
+
 app.listen(port, () => {
-  console.log(`Running on port ${port}`);
+  console.log(`Running on http://localhost:${port}`);
 });

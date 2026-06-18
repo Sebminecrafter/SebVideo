@@ -1,7 +1,17 @@
 <% page = "Home" %>
 <%- include('partials/header') %>
 
-<h1>SebVideo</h1>
-
+<div class="videos">
+    <% for( let index = 0; index < videos.length; index++ ) { %>
+    <% video = videos[index] %>
+    <div class="recommendedvideo">
+        <a href="/watch?v=<%= video.id %>">
+            <img src="<%= video.thumb %>" />
+            <h5><%= video.name %></h5>
+            <p><%= video.author %></p>
+        </a>
+    </div>
+    <% } %>
+</div>
 
 <%- include('partials/footer') %>

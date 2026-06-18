@@ -1,1 +1,5 @@
+# NodeJS modules
 node_modules/
+
+# Live folders (testing)
+storage/
