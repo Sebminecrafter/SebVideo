@@ -19,6 +19,8 @@ function defaultDetails(id) {
   return {
     name: `Video ${id}`,
     author: "Unknown",
+    description: "",
+    similar: [],
     src: "/api/getvideo?id=" + id,
     thumb: "/static/images/thumb.png",
     similar: [],
@@ -35,7 +37,7 @@ function videoExists(id, next) {
   }
   id = Number(id);
   if (!Number.isNaN(id) && Number.isSafeInteger(id)) {
-    let path = "storage/meta/" + id + ".json";
+    let path = "storage/videos/meta/" + id + ".json";
     if (fs.existsSync(path)) {
       return true;
     } else {
@@ -52,9 +54,9 @@ function videoExists(id, next) {
   }
 }
 
-function getVideoDetails(id, next) {
-  if (videoExists(id, next)) {
-    details = fs.readFileSync("storage/meta/" + id + ".json", {
+function getVideoDetails(id) {
+  if (videoExists(id, null)) {
+    details = fs.readFileSync("storage/videos/meta/" + id + ".json", {
       encoding: "utf-8",
     });
     parsed = JSON.parse(details);
@@ -76,7 +78,7 @@ app.get("/", (req, res, next) => {
   let i = 1;
   while (true) {
     if (!videoExists(i, null)) break;
-    let details = getVideoDetails(i, next);
+    let details = getVideoDetails(i);
     details.id = i;
     videos.push(details);
     i++;
@@ -87,11 +89,11 @@ app.get("/", (req, res, next) => {
 app.get("/watch", (req, res, next) => {
   let id = req.query.v;
   if (videoExists(id, next)) {
-    const details = getVideoDetails(id, next);
+    const details = getVideoDetails(id);
     similar = details.similar;
     let recommended = [];
     for (let i = 1; i <= similar.length; i++) {
-      let details = getVideoDetails(similar[i - 1], next);
+      let details = getVideoDetails(similar[i - 1]);
       details.id = i;
       recommended.push(details);
     }
@@ -105,7 +107,7 @@ app.get("/watch", (req, res, next) => {
 app.get("/api/getvideo", (req, res, next) => {
   let id = req.query.id;
   if (videoExists(id, next)) {
-    const videoPath = "storage/videos/" + id + ".mp4";
+    const videoPath = "storage/videos/mp4/" + id + ".mp4";
     res.sendFile(videoPath, { root: "." });
   }
 });
@@ -113,6 +115,16 @@ app.get("/api/getvideo", (req, res, next) => {
 app.get("/api/details", (req, res, next) => {
   let id = req.query.id;
   res.send(getVideoDetails(id));
+});
+
+app.post("/api/upload", (req, res, next) => {
+  while (true) {
+    if (!videoExists(i, null)) break;
+    let details = getVideoDetails(i);
+    details.id = i;
+    videos.push(details);
+    i++;
+  }
 });
 
 //

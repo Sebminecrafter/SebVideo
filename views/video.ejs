@@ -1,20 +1,22 @@
 <%
 name = details.name;
 author = details.author;
+description = details.description;
 videourl = details.src;
 page = name;
 %>
 <%- include('partials/header') %>
 
 <div class="video">
-    <video src="<%= videourl %>" controls></video>
+    <video src="<%= videourl %>" poster="<%- details.thumb %>" preload="auto" controls></video>
     <h1><%= name %></h1>
     <h3><%= author %></h3>
+    <p><%= description %></p>
 </div>
 <div class="riverview">
     <% for( let index = 0; index < recommended.length; index++ ) { %>
     <% video = recommended[index] %>
-    <%- include('partials/recommendedvideo') %>
+    <%- include('partials/videodisplay') %>
     <% } %>
 </div>
 

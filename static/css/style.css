@@ -71,9 +71,10 @@ nav .logo img {
 }
 
 .video {
+    box-sizing: border-box;
     padding-top: 0;
     padding-left: 2vw;
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-width: 0;
 }
 .video video {
@@ -82,19 +83,27 @@ nav .logo img {
     height: auto;
     max-height: 75vh;
     aspect-ratio: 16/9;
+    background-color: #111111;
+    border-radius: 1vw;
 }
 
 .riverview {
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     margin-left: auto;
     flex: 0 0 auto;
+    width: max-content;
+    max-width: 100%;
+    margin: 1vw;
 }
 
 content {
+    box-sizing: border-box;
     display: flex;
     flex: 1 0 auto;
     align-items: flex-start;
+    min-width: 0;
 }
 
 footer {
@@ -106,7 +115,8 @@ footer {
     align-content: center;
 }
 
-.recommended-video {
+.videodisplay {
+    box-sizing: border-box;
     background-color: transparent;
     width: 15vw;
     height: 25vh;
@@ -114,11 +124,14 @@ footer {
     text-align: left;
     text-decoration: none;
     overflow: hidden;
+    padding: 6%;
+    border-radius: 1vw;
 }
-.recommended-video * {
+.videodisplay * {
     padding: 0;
+    line-height: 0;
 }
-.recommended-video img {
+.videodisplay img {
     box-sizing: border-box;
     aspect-ratio: 16 / 9;
     width: 100%;
@@ -127,16 +140,23 @@ footer {
     border-radius: 1vw;
     color: transparent;
 }
-.recommended-video .name {
+.videodisplay .name {
     font-weight: 700;
 }
-.recommended-video .author {
+.videodisplay .author {
     font-weight: 600;
 }
 
-.light #toggletheme:hover, .light .recommended-video:hover {
+.light #toggletheme:hover, .light .videodisplay:hover {
     background-color: rgba(0, 0, 0, 0.25);
 }
-.dark #toggletheme:hover, .dark .recommended-video:hover {
+.dark #toggletheme:hover, .dark .videodisplay:hover {
     background-color: rgba(255, 255, 255, 0.25);
+}
+
+.videos {
+    display: grid;
+    grid-auto-flow: row;
+    padding: 0;
+    margin: 1vw;
 }
