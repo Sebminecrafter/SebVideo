@@ -1,12 +1,14 @@
 <% page = "Error "+code %>
 <%- include('partials/header') %>
-<h1>Error!</h1>
-<h2>
-  <%= code %>
-</h2>
-<p style="
-font-size:0.5em;
-color:gray;
-">Was it you or us?</p>
-<p>The following error occurred trying to process your request: <%= code+" "+msg %></p>
+<div style="display: block;">
+  <h1>Error!</h1>
+  <h2>
+    <%= code %>
+  </h2>
+  <p style="
+  font-size:0.5em;
+  color:gray;
+  ">Was it you or us?</p>
+  <p>The following error occurred trying to process your request: <%= code+" "+msg %></p>
+</div>
 <%- include('partials/footer') %>

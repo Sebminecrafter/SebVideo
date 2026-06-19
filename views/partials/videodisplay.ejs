@@ -1,6 +1,6 @@
 <div class="videodisplay">
     <a href="/watch?v=<%= video.id %>">
-        <img src="<%= video.thumb %>" class="thumbnail" />
+        <img src="/api/thumbnail?id=<%= video.id %>" class="thumbnail" />
         <p class="name"><%= video.name %></p>
         <p class="author"><%= video.author %></p>
     </a>

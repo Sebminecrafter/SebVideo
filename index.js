@@ -59,8 +59,8 @@ function getVideoDetails(id) {
     details = fs.readFileSync("storage/videos/meta/" + id + ".json", {
       encoding: "utf-8",
     });
-    parsed = JSON.parse(details);
-    parsed.src = "/api/getVideo?id=" + id;
+    let parsed = JSON.parse(details);
+    parsed.id = id;
     return parsed;
   }
   return defaultDetails(id);
@@ -112,18 +112,30 @@ app.get("/api/getvideo", (req, res, next) => {
   }
 });
 
+app.get("/api/thumbnail", (req, res, next) => {
+  let id = req.query.id;
+  if (videoExists(id, next)) {
+    const thumbPath = "storage/videos/thumbnails/" + id + ".png";
+    if (fs.existsSync(thumbPath)) {
+      res.sendFile(thumbPath, { root: "." });
+    } else {
+      res.sendFile("static/images/thumb.png", { root: "." });
+    }
+  }
+});
+
 app.get("/api/details", (req, res, next) => {
   let id = req.query.id;
   res.send(getVideoDetails(id));
 });
 
 app.post("/api/upload", (req, res, next) => {
+  let body = JSON.parse(req.body);
+
+  let nextId = 0;
   while (true) {
-    if (!videoExists(i, null)) break;
-    let details = getVideoDetails(i);
-    details.id = i;
-    videos.push(details);
-    i++;
+    if (!videoExists(nextId, null)) break;
+    nextId++;
   }
 });
 

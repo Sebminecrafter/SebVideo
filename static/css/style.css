@@ -72,19 +72,18 @@ nav .logo img {
 
 .video {
     box-sizing: border-box;
-    padding-top: 0;
+    padding-top: 2vw;
     padding-left: 2vw;
     flex: 1 1 0;
     min-width: 0;
 }
 .video video {
-    padding-top: 2vw;
     width: 100%;
     height: auto;
     max-height: 75vh;
     aspect-ratio: 16/9;
-    background-color: #111111;
     border-radius: 1vw;
+    padding: 0;
 }
 
 .riverview {
@@ -118,7 +117,8 @@ footer {
 .videodisplay {
     box-sizing: border-box;
     background-color: transparent;
-    width: 15vw;
+    width: 100%;
+    min-width: 0;
     height: 25vh;
     display: block;
     text-align: left;
@@ -129,7 +129,7 @@ footer {
 }
 .videodisplay * {
     padding: 0;
-    line-height: 0;
+    line-height: 0.75;
 }
 .videodisplay img {
     box-sizing: border-box;
@@ -156,7 +156,16 @@ footer {
 
 .videos {
     display: grid;
-    grid-auto-flow: row;
-    padding: 0;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 2fr));
+    gap: 1vw;
     margin: 1vw;
+    height: 100%;
+    width: 100%;
+}
+
+.dark .video video {
+    background-color: #0F0F0F;
+}
+.light .video video {
+    background-color: #DFDFDF;
 }
