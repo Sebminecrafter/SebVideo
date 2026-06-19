@@ -92,9 +92,9 @@ app.get("/watch", (req, res, next) => {
     const details = getVideoDetails(id);
     similar = details.similar;
     let recommended = [];
-    for (let i = 1; i <= similar.length; i++) {
-      let details = getVideoDetails(similar[i - 1]);
-      details.id = i;
+    for (let i = 0; i < similar.length; i++) {
+      let details = getVideoDetails(similar[i]);
+      details.id = similar[i];
       recommended.push(details);
     }
     res.render("video.ejs", { details, recommended });
