@@ -31,7 +31,6 @@ function defaultDetails(id) {
   };
 }
 
-const UPLOAD_DIR = path.join(__dirname, "storage/videos/");
 const MAX_SIZE = 8192 * 1024 * 1024; // 8G max
 
 const sebtoken = "seb";
@@ -81,6 +80,18 @@ function checkAuth(req, res, next) {
     return res.status(401).send("Unauthorized");
   }
   next();
+}
+
+function findNextAvailableId(currentId) {
+  const metaPath = path.join(
+    __dirname,
+    `storage/videos/meta/${currentId}.json`,
+  );
+  const videoPath = path.join(__dirname, `storage/videos/mp4/${currentId}.mp4`);
+  if (fs.existsSync(metaPath) || fs.existsSync(videoPath)) {
+    return findNextAvailableId(currentId + 1);
+  }
+  return currentId;
 }
 
 let conversionQueue = [];
@@ -252,12 +263,7 @@ app.post("/api/upload", checkAuth, (req, res) => {
     return res.status(400).send("Missing X-Video-Name header");
   }
 
-  let nextId = 1;
-  while (true) {
-    if (!videoExists(nextId, null)) break;
-    nextId++;
-  }
-  const id = nextId;
+  const id = findNextAvailableId(1);
 
   const contentType = req.headers["content-type"] || "";
   let extension = "mp4";
@@ -470,9 +476,24 @@ const requiredDirs = [
   "storage/channels/meta",
 ];
 
+function emptyDirectory(directory) {
+  if (!fs.existsSync(directory)) return;
+  for (const file of fs.readdirSync(directory)) {
+    const filePath = path.join(directory, file);
+    try {
+      fs.rmSync(filePath, { force: true, recursive: true });
+    } catch (err) {
+      console.error(`Failed to remove ${filePath}:`, err.message);
+    }
+  }
+}
+
 requiredDirs.forEach((dir) => {
   fs.mkdirSync(dir, { recursive: true });
 });
+
+emptyDirectory(path.join(__dirname, "storage/uploads/videos"));
+emptyDirectory(path.join(__dirname, "storage/uploads/thumbnails"));
 
 app.listen(port, () => {
   console.log(`Running on http://localhost:${port}`);
