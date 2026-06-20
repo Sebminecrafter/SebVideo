@@ -13,10 +13,24 @@ max = 30;
 <%- include('partials/header') %>
 
 <div class="video">
-    <video src="<%- videourl %>" poster="<%- thumbnail %>" preload="auto" controls></video>
+    <% if (details.processing) { %>
+        <div class="video-placeholder">
+            <div class="placeholder-content">
+                <div class="spinner"></div>
+                <p>Video is being processed...</p>
+                <p style="font-size: 0.9em; opacity: 0.7;">This may take a few moments. Please check back soon.</p>
+            </div>
+        </div>
+    <% } else { %>
+        <video src="<%- videourl %>" poster="<%- thumbnail %>" preload="auto" controls></video>
+    <% } %>
     <div class="videobar">
         <h1 id="title"><%= name %></h1>
-        <a id="download" href="<%- videourl %>" download="<%= name %>.mp4">Download</a>
+        <% if (!details.processing) { %>
+            <a id="download" href="<%- videourl %>" download="<%= name %>.mp4">Download</a>
+        <% } else { %>
+            <button id="download" disabled style="opacity: 0.5; cursor: not-allowed;">Download (Processing)</button>
+        <% } %>
     </div>
     <div class="channelbar">
         <img id="icon" src="" alt="Channel Logo">

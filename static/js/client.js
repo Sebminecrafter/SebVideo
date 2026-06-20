@@ -34,7 +34,14 @@ function getBase64(file) {
   });
 }
 
-function uploadVideo(name, description, token, file, apiUrl = "/api/upload") {
+function uploadVideo(
+  name,
+  description,
+  token,
+  file,
+  apiUrl = "/api/upload",
+  onProgress,
+) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", apiUrl);
@@ -49,9 +56,9 @@ function uploadVideo(name, description, token, file, apiUrl = "/api/upload") {
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
-        console.log(
-          `Upload progress: ${((e.loaded / e.total) * 100).toFixed(1)}%`,
-        );
+        const progress = ((e.loaded / e.total) * 100).toFixed(1);
+        console.log(`Upload progress: ${progress}%`);
+        if (onProgress) onProgress(progress);
       }
     };
 
@@ -69,7 +76,7 @@ function uploadVideo(name, description, token, file, apiUrl = "/api/upload") {
   });
 }
 
-function uploadThumbnail(videoId, token, file) {
+function uploadThumbnail(videoId, token, file, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/upload-thumbnail");
@@ -80,9 +87,9 @@ function uploadThumbnail(videoId, token, file) {
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
-        console.log(
-          `Thumbnail upload progress: ${((e.loaded / e.total) * 100).toFixed(1)}%`,
-        );
+        const progress = ((e.loaded / e.total) * 100).toFixed(1);
+        console.log(`Thumbnail upload progress: ${progress}%`);
+        if (onProgress) onProgress(progress);
       }
     };
 
@@ -110,7 +117,27 @@ function uploadPage() {
   const thumbnailLabel = $("thumbnaillabel");
   const submitBtn = $("submitBtn");
   const videoObj = $("videoobj");
-  const thumbnailObj = $("thumbnailobj");
+  const progressContainer = $("progressContainer");
+  const progressLabel = $("progressLabel");
+  const progressFill = $("progressFill");
+  const progressPercent = $("progressPercent");
+  const notificationOverlay = $("notificationOverlay");
+  const notificationContent = $("notificationContent");
+  const notificationClose = $("notificationClose");
+
+  function showNotification(html) {
+    notificationContent.innerHTML = html;
+    notificationOverlay.style.display = "flex";
+  }
+
+  function closeNotification() {
+    notificationOverlay.style.display = "none";
+  }
+
+  notificationClose.addEventListener("click", closeNotification);
+  notificationOverlay.addEventListener("click", (e) => {
+    if (e.target === notificationOverlay) closeNotification();
+  });
 
   videoInput.addEventListener("change", async () => {
     if (videoInput.files.length === 0) {
@@ -133,24 +160,19 @@ function uploadPage() {
   });
 
   thumbnailInput.addEventListener("change", async () => {
-    if (thumbnailInput.files.length === 0) {
-      thumbnailObj.style.display = "none";
-      return;
-    }
+    if (thumbnailInput.files.length === 0) return;
 
     const file = thumbnailInput.files[0];
 
     if (!file.type.startsWith("image/")) {
       thumbnailLabel.textContent = "Please select an image file.";
       thumbnailInput.value = "";
-      thumbnailObj.style.display = "none";
       return;
     }
 
     thumbnailLabel.textContent = "";
     getBase64(file).then((response) => {
-      thumbnailObj.src = response;
-      thumbnailObj.style.display = "block";
+      videoObj.poster = response;
     });
   });
 
@@ -167,49 +189,84 @@ function uploadPage() {
     }
 
     if (!name) {
-      alert("Please enter a video name");
+      showNotification("<p>Please enter a video name</p>");
       return;
     }
 
     if (!token) {
-      alert("Please enter token");
+      showNotification("<p>Please enter token</p>");
       return;
     }
 
     try {
       submitBtn.disabled = true;
-      submitBtn.textContent = "Uploading...";
+      progressContainer.style.display = "block";
+      progressFill.style.width = "0%";
+      progressPercent.textContent = "0%";
+      progressLabel.textContent = "Uploading video...";
 
-      const uploadResult = await uploadVideo(name, description, token, file);
+      const uploadResult = await uploadVideo(
+        name,
+        description,
+        token,
+        file,
+        "/api/upload",
+        (progress) => {
+          progressFill.style.width = progress + "%";
+          progressPercent.textContent = Math.floor(progress) + "%";
+        },
+      );
       console.log("Video upload response:", uploadResult);
-      alert(`Video uploaded! ID: ${uploadResult.id}`);
+
+      let successHtml = `<p>Video uploaded successfully!</p>
+        <p><a href="/watch?v=${uploadResult.id}">View your video</a></p>
+        <p style="font-size: 0.9em; opacity: 0.8;">Note: Your video may still be processing. Check back in a few moments if it's not playable yet.</p>`;
 
       if (thumbnailFile) {
         try {
-          const thumbnailResult = await uploadThumbnail(uploadResult.id, token, thumbnailFile);
+          progressLabel.textContent = "Uploading thumbnail...";
+          progressFill.style.width = "0%";
+          progressPercent.textContent = "0%";
+
+          const thumbnailResult = await uploadThumbnail(
+            uploadResult.id,
+            token,
+            thumbnailFile,
+            (progress) => {
+              progressFill.style.width = progress + "%";
+              progressPercent.textContent = Math.floor(progress) + "%";
+            },
+          );
           console.log("Thumbnail upload response:", thumbnailResult);
-          alert("Thumbnail uploaded!");
+          successHtml = `<p>Video and thumbnail uploaded successfully!</p>
+            <p><a href="/watch?v=${uploadResult.id}">View your video</a></p>
+            <p style="font-size: 0.9em; opacity: 0.8;">Note: Your video may still be processing. Check back in a few moments if it's not playable yet.</p>`;
         } catch (e) {
           console.error("Thumbnail upload failed:", e);
-          alert("Video uploaded but thumbnail failed: " + e.message);
+          successHtml = `<p>Video uploaded successfully, but thumbnail upload failed.</p>
+            <p><a href="/watch?v=${uploadResult.id}">View your video</a></p>
+            <p style="font-size: 0.9em; opacity: 0.8; color: #ff9800;">Error: ${e.message}</p>
+            <p style="font-size: 0.9em; opacity: 0.8;">Note: Your video may still be processing. Check back in a few moments if it's not playable yet.</p>`;
         }
       }
+
+      showNotification(successHtml);
 
       nameInput.value = "";
       descriptionInput.value = "";
       videoInput.value = "";
       thumbnailInput.value = "";
       videoObj.src = "";
-      thumbnailObj.src = "";
-      thumbnailObj.style.display = "none";
+      videoObj.poster = "";
       videoLabel.textContent = "Choose a video.";
       thumbnailLabel.textContent = "Choose a thumbnail (optional).";
     } catch (e) {
       console.error("Upload failed:", e);
-      alert("Upload failed: " + e.message);
+      showNotification(`<p>Upload failed: ${e.message}</p>`);
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = "Upload";
+      progressContainer.style.display = "none";
     }
   });
 }

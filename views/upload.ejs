@@ -3,26 +3,42 @@
 
 <div class="upload-page">
     <div class="upload-form">
-        <label for="name">Name</label>
+        <label for="name">Name*</label>
         <input type="text" id="name" name="name" />
 
         <label for="description">Description</label>
         <textarea id="description" name="description"></textarea>
 
-        <label for="token">Token</label>
+        <label for="token">Token*</label>
         <input type="text" id="token" name="token" />
 
-        <label id="videolabel" for="video">Choose a video.</label>
+        <label id="videolabel" for="video">Choose a video*</label>
         <input type="file" id="video" name="video" accept="video/*" />
 
-        <label id="thumbnaillabel" for="thumbnail">Choose a thumbnail (optional).</label>
+        <label id="thumbnaillabel" for="thumbnail">Choose a thumbnail</label>
         <input type="file" id="thumbnail" name="thumbnail" accept="image/*" />
 
         <button id="submitBtn" type="button">Upload</button>
+
+        <div id="progressContainer" style="display: none;">
+            <p id="progressLabel">Uploading...</p>
+            <div id="progressBar" class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <p id="progressPercent">0%</p>
+        </div>
+
+        <p id="notice">* - required.</p>
     </div>
     <div class="uploaded-video">
         <video id="videoobj" controls></video>
-        <img id="thumbnailobj" style="display: none; max-width: 100%; margin-top: 1rem;" />
+    </div>
+</div>
+
+<div id="notificationOverlay" class="notification-overlay" style="display: none;">
+    <div id="notification" class="notification">
+        <div id="notificationContent"></div>
+        <button id="notificationClose" class="notification-close">×</button>
     </div>
 </div>
 

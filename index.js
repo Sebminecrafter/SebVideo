@@ -106,6 +106,7 @@ function processConversionQueue() {
         description,
         date: Date.now(),
         similar: [],
+        processing: false,
       };
       fs.writeFileSync(metaPath, JSON.stringify(metadata));
       console.log(`[Video ${id}] Conversion complete`);
@@ -307,6 +308,15 @@ app.post("/api/upload", checkAuth, (req, res) => {
 
   writeStream.on("finish", () => {
     if (aborted) return;
+    const metadata = {
+      name,
+      author: sebtoken,
+      description,
+      date: Date.now(),
+      similar: [],
+      processing: true,
+    };
+    fs.writeFileSync(metaPath, JSON.stringify(metadata));
     queueVideoConversion(
       id,
       uploadPath,
