@@ -1,6 +1,9 @@
 //
 // Imports and setup
 //
+// This file implements a small video server using Express.
+// It accepts uploads then converts and stores video files.
+// Thumbnails are processed and stored for quick serving.
 const express = require("express");
 const ejs = require("ejs");
 const fs = require("fs");
@@ -8,6 +11,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { isNumberObject } = require("util/types");
 const ffmpeg = require("fluent-ffmpeg");
+const { execSync } = require("child_process");
 const sharp = require("sharp");
 
 const app = express();
@@ -31,9 +35,16 @@ function defaultDetails(id) {
   };
 }
 
+// Return a minimal details object for a video id
+// This is used when no metadata file is present for the id
+
 const MAX_SIZE = 8192 * 1024 * 1024; // 8G max
 
+// Max allowed upload bytes for video files
+
 const sebtoken = "seb";
+
+// Simple static token used to protect upload endpoints
 
 //
 // Functions
@@ -62,6 +73,9 @@ function videoExists(id, next) {
   }
 }
 
+// Validate that the given id is a number and that meta file exists
+// If the id is invalid or missing return false and call next with an error
+
 function getVideoDetails(id) {
   if (videoExists(id, null)) {
     details = fs.readFileSync("storage/videos/meta/" + id + ".json", {
@@ -74,6 +88,9 @@ function getVideoDetails(id) {
   return defaultDetails(id);
 }
 
+// Read and return the metadata for a video id
+// If there is no metadata the default details are returned
+
 function checkAuth(req, res, next) {
   const token = req.headers["authorization"]?.replace("Bearer ", "");
   if (!token || token !== sebtoken) {
@@ -81,6 +98,9 @@ function checkAuth(req, res, next) {
   }
   next();
 }
+
+// Simple authorization middleware for admin style endpoints
+// It checks for a bearer token that matches the static token above
 
 function findNextAvailableId(currentId) {
   const metaPath = path.join(
@@ -94,9 +114,48 @@ function findNextAvailableId(currentId) {
   return currentId;
 }
 
+// Find the next free numeric id where no meta or video file exists
+// This is a simple sequential allocator starting from the given id
+
 let conversionQueue = [];
 let activeConversions = 0;
 const MAX_CONCURRENT = 3;
+
+// Detect best available hardware encoder supported by ffmpeg (if any)
+function detectHardwareEncoder() {
+  try {
+    const encoders = execSync("ffmpeg -hide_banner -encoders", {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 10000,
+    });
+    // Priority: NVENC (NVIDIA), QSV (Intel), VAAPI (Linux GPU), AMF (AMD)
+    if (encoders.includes("h264_nvenc") || encoders.includes("hevc_nvenc")) {
+      return {
+        codec: encoders.includes("h264_nvenc") ? "h264_nvenc" : "hevc_nvenc",
+        hwaccel: "cuda",
+      };
+    }
+    if (encoders.includes("h264_qsv")) {
+      return { codec: "h264_qsv", hwaccel: "qsv" };
+    }
+    if (encoders.includes("h264_vaapi")) {
+      return { codec: "h264_vaapi", hwaccel: "vaapi" };
+    }
+    if (encoders.includes("h264_amf")) {
+      return { codec: "h264_amf", hwaccel: "dxva2" };
+    }
+  } catch (e) {
+    // If ffmpeg isn't available in PATH or command fails, fall back to software
+  }
+  return { codec: "libx264", hwaccel: null };
+}
+
+// Probe ffmpeg to find a good hardware encoder option when available
+// If none are found the software encoder is used
+
+const ffmpegHardware = detectHardwareEncoder();
+console.log("[FFmpeg] selected encoder:", ffmpegHardware.codec);
 
 function processConversionQueue() {
   if (activeConversions >= MAX_CONCURRENT || conversionQueue.length === 0)
@@ -107,7 +166,38 @@ function processConversionQueue() {
     conversionQueue.shift();
 
   ffmpeg(inputPath)
-    .outputOptions(["-c:v libx264", "-b:v 2500k", "-c:a aac", "-b:a 128k"])
+    // add hardware accel option where applicable before the input
+    .inputOptions(
+      ffmpegHardware.hwaccel ? ["-hwaccel", ffmpegHardware.hwaccel] : [],
+    )
+    // choose output options based on detected hardware encoder
+    .outputOptions(
+      (() => {
+        const enc = ffmpegHardware.codec;
+        if (enc === "libx264") {
+          return ["-c:v libx264", "-b:v 2500k", "-c:a aac", "-b:a 128k"];
+        }
+        if (enc === "h264_nvenc" || enc === "hevc_nvenc") {
+          return [
+            `-c:v ${enc}`,
+            "-b:v 2500k",
+            "-c:a aac",
+            "-b:a 128k",
+            "-preset p1",
+          ];
+        }
+        if (enc === "h264_qsv") {
+          return ["-c:v h264_qsv", "-b:v 2500k", "-c:a aac", "-b:a 128k"];
+        }
+        if (enc === "h264_vaapi") {
+          return ["-c:v h264_vaapi", "-b:v 2500k", "-c:a aac", "-b:a 128k"];
+        }
+        if (enc === "h264_amf") {
+          return ["-c:v h264_amf", "-b:v 2500k", "-c:a aac", "-b:a 128k"];
+        }
+        return ["-c:v libx264", "-b:v 2500k", "-c:a aac", "-b:a 128k"];
+      })(),
+    )
     .output(outputPath)
     .on("end", () => {
       fs.unlink(inputPath, () => {});
@@ -133,6 +223,9 @@ function processConversionQueue() {
     .run();
 }
 
+// Process queued video files and convert them to mp4 using ffmpeg
+// This function respects a limit on concurrent conversions
+
 function queueVideoConversion(
   id,
   inputPath,
@@ -151,6 +244,8 @@ function queueVideoConversion(
   });
   processConversionQueue();
 }
+
+// Add a conversion job to the queue and trigger processing
 
 function processThumbnailQueue() {
   if (thumbnailQueue.length === 0) return;
@@ -172,12 +267,17 @@ function processThumbnailQueue() {
     });
 }
 
+// Resize and encode an uploaded image to a fixed thumbnail size
+// Errors are logged and processing continues with remaining items
+
 let thumbnailQueue = [];
 
 function queueThumbnailProcessing(id, inputPath, outputPath) {
   thumbnailQueue.push({ id, inputPath, outputPath });
   processThumbnailQueue();
 }
+
+// Queue a thumbnail job then start processing if the queue is idle
 
 //
 // Routes
@@ -199,6 +299,8 @@ app.get("/", (req, res, next) => {
   res.render("home.ejs", { videos });
 });
 
+// Render the home page with all available videos
+
 app.get("/watch", (req, res, next) => {
   let id = req.query.v;
   if (videoExists(id, next)) {
@@ -214,9 +316,13 @@ app.get("/watch", (req, res, next) => {
   }
 });
 
+// Watch page for a single video with simple recommendations
+
 app.get("/upload", (req, res) => {
   res.render("upload.ejs");
 });
+
+// Upload page form for manual uploads via browser
 
 // Backend API
 //
@@ -228,6 +334,8 @@ app.get("/api/getvideo", (req, res, next) => {
     res.sendFile(videoPath, { root: "." });
   }
 });
+
+// Serve the converted mp4 file for a given id
 
 app.get("/api/thumbnail", (req, res, next) => {
   let id = req.query.id;
@@ -241,10 +349,14 @@ app.get("/api/thumbnail", (req, res, next) => {
   }
 });
 
+// Serve a thumbnail image or a default placeholder if none exists
+
 app.get("/api/details", (req, res, next) => {
   let id = req.query.id;
   res.send(getVideoDetails(id));
 });
+
+// Return JSON metadata for a given video id
 
 app.post("/api/upload", checkAuth, (req, res) => {
   let name, description;
@@ -340,6 +452,9 @@ app.post("/api/upload", checkAuth, (req, res) => {
       size: bytesReceived,
     });
   });
+
+  // Handle a raw upload stream from the client
+  // The upload is saved to a temporary file then queued for conversion
 
   writeStream.on("error", (err) => {
     if (!res.headersSent) res.status(500).send("Failed to save file");
