@@ -1,6 +1,27 @@
 <% page = "Upload Video" %>
 <%- include('partials/header') %>
 
+<div class="upload-page">
+    <div class="upload-form">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" />
 
+        <label for="description">Description</label>
+        <textarea id="description" name="description"></textarea>
+
+        <label for="token">Token</label>
+        <input type="text" id="token" name="token" />
+
+        <label id="videolabel" for="video">Choose a video.</label>
+        <input type="file" id="video" name="video" accept="video/mp4" />
+
+        <button id="submitBtn" type="button">Upload</button>
+    </div>
+    <div class="uploaded-video">
+        <video id="videoobj" controls></video>
+    </div>
+</div>
+
+<script>uploadPage();</script>
 
 <%- include('partials/footer') %>

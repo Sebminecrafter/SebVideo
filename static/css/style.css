@@ -66,6 +66,17 @@ nav .logo img {
     object-fit: contain;
     padding: 0;
 }
+
+nav .upload {
+    border-radius: 100vw;
+    margin-left: auto;
+    white-space: pre;
+}
+
+nav .upload, #toggletheme {
+    margin-right: 0.5vw;
+}
+
 /* Light/dark mode theme switcher */
 #toggletheme {
     width: 2vw;
@@ -74,8 +85,6 @@ nav .logo img {
     border: none;
     font-size: 100%;
     border-radius: 100vw;
-    margin-left: auto;
-    margin-right: 0.5vw;
 }
 
 /*
@@ -159,17 +168,17 @@ footer {
 /*
  * Light/dark background color switching for stuff
  */
-.light #toggletheme:hover, .light .videodisplay:hover, .light .video .description:hover, .light .video .videobar #download:hover {
+.light #toggletheme:hover, .light .videodisplay:hover, .light .video .description:hover, .light .video .videobar #download:hover, .light nav .upload:hover {
     background-color: rgba(0, 0, 0, 0.25);
 }
-.dark #toggletheme:hover, .dark .videodisplay:hover, .dark .video .description:hover, .dark .video .videobar #download:hover {
+.dark #toggletheme:hover, .dark .videodisplay:hover, .dark .video .description:hover, .dark .video .videobar #download:hover, .dark nav .upload:hover {
     background-color: rgba(255, 255, 255, 0.25);
 }
 
-.dark .video video, .dark .video .description, .dark .video .videobar #download {
+.dark .video video, .dark .video .description, .dark .video .videobar #download, .dark nav .upload, .dark .upload-page {
     background-color: #0F0F0F;
 }
-.light .video video, .light .video .description, .light .video .videobar #download {
+.light .video video, .light .video .description, .light .video .videobar #download, .light nav .upload, .light .upload-page {
     background-color: #DFDFDF;
 }
 
@@ -232,7 +241,7 @@ footer {
     padding: 12px 16px;
     cursor: pointer;
 }
-.video .description summary::-webkit-details-marker, .video .description:open .preview, .video .description .label-less, .video .description:open .label-more, .video .description:not(:open) p {
+.video .description summary::-webkit-details-marker, .video .description ::marker, .video .description:open .preview, .video .description .label-less, .video .description:open .label-more, .video .description:not(:open) p {
     display: none;
 }
 .video .description .preview, .video .description p {
@@ -245,4 +254,39 @@ footer {
 }
 .video .description:open .label-less, .video .description .label-more {
     display: inline;
+}
+
+/*
+ * Upload page
+ */
+
+.upload-page {
+    margin: auto;
+    padding: 1vw;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: row;
+    border-radius: 2vw;
+}
+
+.upload-page .upload-form {
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+}
+
+.upload-page .upload-form #description {
+    min-width: 10vw;
+    max-width: 30vw;
+    min-height: 20vh;
+    max-height: 30vh;
+}
+
+.upload-page .uploaded-video video {
+    margin-left: auto;
+    border-radius: 1vw;
+    aspect-ratio: 16 / 9;
+    width: 15vw;
+    height: auto;
 }

@@ -30,7 +30,7 @@ function defaultDetails(id) {
 }
 
 const UPLOAD_DIR = path.join(__dirname, "storage/videos/");
-const MAX_SIZE = 2048 * 1024 * 1024; // 2G max
+const MAX_SIZE = 8192 * 1024 * 1024; // 8G max
 
 const sebtoken = "seb";
 
@@ -116,6 +116,10 @@ app.get("/watch", (req, res, next) => {
   }
 });
 
+app.get("/upload", (req, res) => {
+  res.render("upload.ejs");
+});
+
 // Backend API
 //
 
@@ -145,9 +149,17 @@ app.get("/api/details", (req, res, next) => {
 });
 
 app.post("/api/upload", checkAuth, (req, res) => {
-  // Pull metadata from headers (and/or query params)
-  const name = req.headers["x-video-name"];
-  const description = req.headers["x-video-description"] || "";
+  let name, description;
+
+  try {
+    const rawName = req.headers["x-video-name"];
+    name = rawName ? decodeURIComponent(rawName) : rawName;
+    description = decodeURIComponent(req.headers["x-video-description"] || "");
+  } catch (e) {
+    return res
+      .status(400)
+      .send("Invalid X-Video-Name or X-Video-Description header");
+  }
 
   if (!name) {
     return res.status(400).send("Missing X-Video-Name header");
@@ -170,19 +182,64 @@ app.post("/api/upload", checkAuth, (req, res) => {
   let bytesReceived = 0;
   let aborted = false;
 
+  // validate mp4 magic bytes
+  let header = Buffer.alloc(0);
+  let validated = false;
+  const HEADER_BYTES_NEEDED = 12; // need bytes 4-7 (ftyp); a few extra for safety
+
+  function isValidMp4Signature(buf) {
+    // MP4/MOV/M4V all have "ftyp" near beginning
+    return buf.length >= 8 && buf.toString("ascii", 4, 8) === "ftyp";
+  }
+
+  function rejectUpload(status, message) {
+    if (aborted) return;
+    aborted = true;
+    writeStream.destroy();
+    fs.unlink(filePath, () => {});
+    if (!res.headersSent) res.status(status).send(message);
+    req.destroy();
+  }
+
   req.on("data", (chunk) => {
+    if (aborted) return;
+
     bytesReceived += chunk.length;
-    if (bytesReceived > MAX_SIZE && !aborted) {
-      aborted = true;
-      req.unpipe(writeStream);
-      writeStream.destroy();
-      fs.unlink(filePath, () => {});
-      res.status(413).send("File too large");
-      req.destroy();
+    if (bytesReceived > MAX_SIZE) {
+      rejectUpload(413, "File too large");
+      return;
+    }
+
+    if (!validated) {
+      header = Buffer.concat([header, chunk]);
+      if (header.length >= HEADER_BYTES_NEEDED) {
+        if (!isValidMp4Signature(header)) {
+          rejectUpload(415, "File does not appear to be a valid MP4");
+          return;
+        }
+        validated = true;
+        if (!writeStream.write(header)) {
+          req.pause();
+          writeStream.once("drain", () => req.resume());
+        }
+      }
+      // else: keep buffering until we have enough header bytes
+    } else {
+      if (!writeStream.write(chunk)) {
+        req.pause();
+        writeStream.once("drain", () => req.resume());
+      }
     }
   });
 
-  req.pipe(writeStream);
+  req.on("end", () => {
+    if (aborted) return;
+    if (!validated) {
+      // Stream ended before we ever got enough bytes to check, too small to be mp4.
+      return rejectUpload(415, "File does not appear to be a valid MP4");
+    }
+    writeStream.end();
+  });
 
   writeStream.on("finish", () => {
     if (aborted) return;
@@ -215,7 +272,6 @@ app.post("/api/upload", checkAuth, (req, res) => {
     if (!res.headersSent) res.status(400).send("Upload error");
   });
 
-  // Disconnect or end
   req.on("close", () => {
     if (!req.complete && !aborted) {
       aborted = true;

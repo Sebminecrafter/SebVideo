@@ -13,10 +13,10 @@ max = 30;
 <%- include('partials/header') %>
 
 <div class="video">
-    <video src="<%= videourl %>" poster="<%= thumbnail %>" preload="auto" controls></video>
+    <video src="<%- videourl %>" poster="<%- thumbnail %>" preload="auto" controls></video>
     <div class="videobar">
         <h1 id="title"><%= name %></h1>
-        <a id="download" href="<%= videourl %>" download="<%= name %>.mp4">Download</a>
+        <a id="download" href="<%- videourl %>" download="<%= name %>.mp4">Download</a>
     </div>
     <div class="channelbar">
         <img id="icon" src="" alt="Channel Logo">
