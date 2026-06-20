@@ -261,10 +261,11 @@ app.post("/api/upload", checkAuth, (req, res) => {
 
   const contentType = req.headers["content-type"] || "";
   let extension = "mp4";
-  if (contentType.includes("video/webm")) extension = "webm";
+  if (contentType.includes("webm")) extension = "webm";
   else if (contentType.includes("video/quicktime")) extension = "mov";
   else if (contentType.includes("video/x-msvideo")) extension = "avi";
   else if (contentType.includes("video/mpeg")) extension = "mpeg";
+  else if (contentType.includes("matroska")) extension = "mkv";
 
   const uploadPath = path.join(
     __dirname,

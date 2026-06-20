@@ -440,14 +440,13 @@ footer {
     width: 3vw;
     height: 3vw;
     border: 3px solid rgba(0,0,0,0.1);
-    border-top: 3px solid #4CAF50;
+    border-top: 3px solid #35a2e0;
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
 
 .dark .spinner {
     border-color: rgba(255,255,255,0.1);
-    border-top-color: #66BB6A;
 }
 
 @keyframes spin {
