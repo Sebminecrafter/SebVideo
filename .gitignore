@@ -3,3 +3,6 @@ node_modules/
 
 # Live folders (testing)
 storage/
+
+# VS Code
+.vscode/

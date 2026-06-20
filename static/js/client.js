@@ -34,21 +34,6 @@ function getBase64(file) {
   });
 }
 
-function checkMp4Signature(file) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const bytes = new Uint8Array(e.target.result);
-      // bytes 4-7 should spell "ftyp" for ISO-BMFF based formats (mp4, mov, etc.)
-      const sig = String.fromCharCode(bytes[4], bytes[5], bytes[6], bytes[7]);
-      resolve(sig === "ftyp");
-    };
-    reader.onerror = () => resolve(false);
-    // only need the first 12 bytes
-    reader.readAsArrayBuffer(file.slice(0, 12));
-  });
-}
-
 function uploadVideo(name, description, token, file, apiUrl = "/api/upload") {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -56,7 +41,7 @@ function uploadVideo(name, description, token, file, apiUrl = "/api/upload") {
 
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
-    xhr.setRequestHeader("X-Video-Name", name);
+    xhr.setRequestHeader("X-Video-Name", encodeURIComponent(name));
     xhr.setRequestHeader(
       "X-Video-Description",
       encodeURIComponent(description),
@@ -72,7 +57,38 @@ function uploadVideo(name, description, token, file, apiUrl = "/api/upload") {
 
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(xhr.responseText);
+        resolve(JSON.parse(xhr.responseText));
+      } else {
+        reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Network error during upload"));
+
+    xhr.send(file);
+  });
+}
+
+function uploadThumbnail(videoId, token, file) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/upload-thumbnail");
+
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.setRequestHeader("Content-Type", file.type || "image/jpeg");
+    xhr.setRequestHeader("X-Video-Id", videoId);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        console.log(
+          `Thumbnail upload progress: ${((e.loaded / e.total) * 100).toFixed(1)}%`,
+        );
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText));
       } else {
         reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
       }
@@ -90,8 +106,11 @@ function uploadPage() {
   const tokenInput = $("token");
   const videoInput = $("video");
   const videoLabel = $("videolabel");
+  const thumbnailInput = $("thumbnail");
+  const thumbnailLabel = $("thumbnaillabel");
   const submitBtn = $("submitBtn");
   const videoObj = $("videoobj");
+  const thumbnailObj = $("thumbnailobj");
 
   videoInput.addEventListener("change", async () => {
     if (videoInput.files.length === 0) {
@@ -101,15 +120,8 @@ function uploadPage() {
 
     const file = videoInput.files[0];
 
-    if (file.type !== "video/mp4") {
-      videoLabel.textContent = "Please select an MP4 file.";
-      videoInput.value = "";
-      return;
-    }
-
-    const isMp4 = await checkMp4Signature(file);
-    if (!isMp4) {
-      videoLabel.textContent = "File does not appear to be a valid MP4.";
+    if (!file.type.startsWith("video/")) {
+      videoLabel.textContent = "Please select a video file.";
       videoInput.value = "";
       return;
     }
@@ -120,18 +132,85 @@ function uploadPage() {
     });
   });
 
-  submitBtn.addEventListener("click", () => {
+  thumbnailInput.addEventListener("change", async () => {
+    if (thumbnailInput.files.length === 0) {
+      thumbnailObj.style.display = "none";
+      return;
+    }
+
+    const file = thumbnailInput.files[0];
+
+    if (!file.type.startsWith("image/")) {
+      thumbnailLabel.textContent = "Please select an image file.";
+      thumbnailInput.value = "";
+      thumbnailObj.style.display = "none";
+      return;
+    }
+
+    thumbnailLabel.textContent = "";
+    getBase64(file).then((response) => {
+      thumbnailObj.src = response;
+      thumbnailObj.style.display = "block";
+    });
+  });
+
+  submitBtn.addEventListener("click", async () => {
     const name = nameInput.value;
     const description = descriptionInput.value;
     const token = tokenInput.value;
     const file = videoInput.files[0];
+    const thumbnailFile = thumbnailInput.files[0];
 
     if (!file) {
       videoLabel.textContent = "Choose a video.";
       return;
     }
 
-    uploadVideo(name, description, token, file);
+    if (!name) {
+      alert("Please enter a video name");
+      return;
+    }
+
+    if (!token) {
+      alert("Please enter token");
+      return;
+    }
+
+    try {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Uploading...";
+
+      const uploadResult = await uploadVideo(name, description, token, file);
+      console.log("Video upload response:", uploadResult);
+      alert(`Video uploaded! ID: ${uploadResult.id}`);
+
+      if (thumbnailFile) {
+        try {
+          const thumbnailResult = await uploadThumbnail(uploadResult.id, token, thumbnailFile);
+          console.log("Thumbnail upload response:", thumbnailResult);
+          alert("Thumbnail uploaded!");
+        } catch (e) {
+          console.error("Thumbnail upload failed:", e);
+          alert("Video uploaded but thumbnail failed: " + e.message);
+        }
+      }
+
+      nameInput.value = "";
+      descriptionInput.value = "";
+      videoInput.value = "";
+      thumbnailInput.value = "";
+      videoObj.src = "";
+      thumbnailObj.src = "";
+      thumbnailObj.style.display = "none";
+      videoLabel.textContent = "Choose a video.";
+      thumbnailLabel.textContent = "Choose a thumbnail (optional).";
+    } catch (e) {
+      console.error("Upload failed:", e);
+      alert("Upload failed: " + e.message);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Upload";
+    }
   });
 }
 

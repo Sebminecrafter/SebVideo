@@ -7,6 +7,8 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { isNumberObject } = require("util/types");
+const ffmpeg = require("fluent-ffmpeg");
+const sharp = require("sharp");
 
 const app = express();
 app.engine("ejs", ejs.renderFile);
@@ -81,6 +83,90 @@ function checkAuth(req, res, next) {
   next();
 }
 
+let conversionQueue = [];
+let activeConversions = 0;
+const MAX_CONCURRENT = 3;
+
+function processConversionQueue() {
+  if (activeConversions >= MAX_CONCURRENT || conversionQueue.length === 0)
+    return;
+
+  activeConversions++;
+  const { id, inputPath, outputPath, metaPath, name, description } =
+    conversionQueue.shift();
+
+  ffmpeg(inputPath)
+    .outputOptions(["-c:v libx264", "-b:v 2500k", "-c:a aac", "-b:a 128k"])
+    .output(outputPath)
+    .on("end", () => {
+      fs.unlink(inputPath, () => {});
+      const metadata = {
+        name,
+        author: sebtoken,
+        description,
+        date: Date.now(),
+        similar: [],
+      };
+      fs.writeFileSync(metaPath, JSON.stringify(metadata));
+      console.log(`[Video ${id}] Conversion complete`);
+      activeConversions--;
+      processConversionQueue();
+    })
+    .on("error", (err) => {
+      console.error(`[Video ${id}] Conversion error:`, err.message);
+      fs.unlink(inputPath, () => {});
+      activeConversions--;
+      processConversionQueue();
+    })
+    .run();
+}
+
+function queueVideoConversion(
+  id,
+  inputPath,
+  outputPath,
+  metaPath,
+  name,
+  description,
+) {
+  conversionQueue.push({
+    id,
+    inputPath,
+    outputPath,
+    metaPath,
+    name,
+    description,
+  });
+  processConversionQueue();
+}
+
+function processThumbnailQueue() {
+  if (thumbnailQueue.length === 0) return;
+  const { id, inputPath, outputPath } = thumbnailQueue.shift();
+
+  sharp(inputPath)
+    .resize(1280, 720, { fit: "cover" })
+    .jpeg({ quality: 80 })
+    .toFile(outputPath)
+    .then(() => {
+      fs.unlink(inputPath, () => {});
+      console.log(`[Thumbnail ${id}] Processing complete`);
+      processThumbnailQueue();
+    })
+    .catch((err) => {
+      console.error(`[Thumbnail ${id}] Processing error:`, err.message);
+      fs.unlink(inputPath, () => {});
+      processThumbnailQueue();
+    });
+}
+
+let thumbnailQueue = [];
+
+function queueThumbnailProcessing(id, inputPath, outputPath) {
+  thumbnailQueue.push({ id, inputPath, outputPath });
+  processThumbnailQueue();
+}
+
 //
 // Routes
 //
@@ -134,7 +220,7 @@ app.get("/api/getvideo", (req, res, next) => {
 app.get("/api/thumbnail", (req, res, next) => {
   let id = req.query.id;
   if (videoExists(id, next)) {
-    const thumbPath = "storage/videos/thumbnails/" + id + ".png";
+    const thumbPath = "storage/videos/thumbnails/" + id + ".jpg";
     if (fs.existsSync(thumbPath)) {
       res.sendFile(thumbPath, { root: "." });
     } else {
@@ -164,9 +250,6 @@ app.post("/api/upload", checkAuth, (req, res) => {
   if (!name) {
     return res.status(400).send("Missing X-Video-Name header");
   }
-  if (req.headers["content-type"] !== "video/mp4") {
-    return res.status(415).send("Expected Content-Type: video/mp4");
-  }
 
   let nextId = 1;
   while (true) {
@@ -175,28 +258,29 @@ app.post("/api/upload", checkAuth, (req, res) => {
   }
   const id = nextId;
 
-  const filePath = path.join(UPLOAD_DIR, `/mp4/${id}.mp4`);
-  const filePathMeta = path.join(UPLOAD_DIR, `/meta/${id}.json`);
+  const contentType = req.headers["content-type"] || "";
+  let extension = "mp4";
+  if (contentType.includes("video/webm")) extension = "webm";
+  else if (contentType.includes("video/quicktime")) extension = "mov";
+  else if (contentType.includes("video/x-msvideo")) extension = "avi";
+  else if (contentType.includes("video/mpeg")) extension = "mpeg";
 
-  const writeStream = fs.createWriteStream(filePath);
+  const uploadPath = path.join(
+    __dirname,
+    `storage/uploads/videos/${id}.${extension}`,
+  );
+  const outputPath = path.join(__dirname, `storage/videos/mp4/${id}.mp4`);
+  const metaPath = path.join(__dirname, `storage/videos/meta/${id}.json`);
+
+  const writeStream = fs.createWriteStream(uploadPath);
   let bytesReceived = 0;
   let aborted = false;
-
-  // validate mp4 magic bytes
-  let header = Buffer.alloc(0);
-  let validated = false;
-  const HEADER_BYTES_NEEDED = 12; // need bytes 4-7 (ftyp); a few extra for safety
-
-  function isValidMp4Signature(buf) {
-    // MP4/MOV/M4V all have "ftyp" near beginning
-    return buf.length >= 8 && buf.toString("ascii", 4, 8) === "ftyp";
-  }
 
   function rejectUpload(status, message) {
     if (aborted) return;
     aborted = true;
     writeStream.destroy();
-    fs.unlink(filePath, () => {});
+    fs.unlink(uploadPath, () => {});
     if (!res.headersSent) res.status(status).send(message);
     req.destroy();
   }
@@ -210,55 +294,33 @@ app.post("/api/upload", checkAuth, (req, res) => {
       return;
     }
 
-    if (!validated) {
-      header = Buffer.concat([header, chunk]);
-      if (header.length >= HEADER_BYTES_NEEDED) {
-        if (!isValidMp4Signature(header)) {
-          rejectUpload(415, "File does not appear to be a valid MP4");
-          return;
-        }
-        validated = true;
-        if (!writeStream.write(header)) {
-          req.pause();
-          writeStream.once("drain", () => req.resume());
-        }
-      }
-      // else: keep buffering until we have enough header bytes
-    } else {
-      if (!writeStream.write(chunk)) {
-        req.pause();
-        writeStream.once("drain", () => req.resume());
-      }
+    if (!writeStream.write(chunk)) {
+      req.pause();
+      writeStream.once("drain", () => req.resume());
     }
   });
 
   req.on("end", () => {
     if (aborted) return;
-    if (!validated) {
-      // Stream ended before we ever got enough bytes to check, too small to be mp4.
-      return rejectUpload(415, "File does not appear to be a valid MP4");
-    }
     writeStream.end();
   });
 
   writeStream.on("finish", () => {
     if (aborted) return;
-    let metadata = {
-      name: name,
-      author: sebtoken,
-      description: description,
-      date: Date.now(),
-      similar: [],
-    };
-    let jsonFile = JSON.stringify(metadata);
-    fs.writeFile(filePathMeta, jsonFile, (err) => {
-      if (err) return res.status(500).send("Failed to save metadata file!");
-      res.status(200).json({
-        message: "Upload received",
-        name,
-        description,
-        size: bytesReceived,
-      });
+    queueVideoConversion(
+      id,
+      uploadPath,
+      outputPath,
+      metaPath,
+      name,
+      description,
+    );
+    res.status(202).json({
+      message: "Video uploaded, conversion in progress",
+      id,
+      name,
+      description,
+      size: bytesReceived,
     });
   });
 
@@ -268,7 +330,7 @@ app.post("/api/upload", checkAuth, (req, res) => {
 
   req.on("error", (err) => {
     writeStream.destroy();
-    fs.unlink(filePath, () => {});
+    fs.unlink(uploadPath, () => {});
     if (!res.headersSent) res.status(400).send("Upload error");
   });
 
@@ -276,7 +338,88 @@ app.post("/api/upload", checkAuth, (req, res) => {
     if (!req.complete && !aborted) {
       aborted = true;
       writeStream.destroy();
-      fs.unlink(filePath, () => {});
+      fs.unlink(uploadPath, () => {});
+    }
+  });
+});
+
+app.post("/api/upload-thumbnail", checkAuth, (req, res) => {
+  const videoId = req.headers["x-video-id"];
+  if (!videoId) {
+    return res.status(400).send("Missing X-Video-Id header");
+  }
+
+  const contentType = req.headers["content-type"] || "";
+  if (!contentType.includes("image/")) {
+    return res.status(415).send("Expected Content-Type: image/*");
+  }
+
+  const uploadPath = path.join(
+    __dirname,
+    `storage/uploads/thumbnails/${videoId}.tmp`,
+  );
+  const outputPath = path.join(
+    __dirname,
+    `storage/videos/thumbnails/${videoId}.jpg`,
+  );
+
+  const writeStream = fs.createWriteStream(uploadPath);
+  let bytesReceived = 0;
+  let aborted = false;
+
+  function rejectUpload(status, message) {
+    if (aborted) return;
+    aborted = true;
+    writeStream.destroy();
+    fs.unlink(uploadPath, () => {});
+    if (!res.headersSent) res.status(status).send(message);
+    req.destroy();
+  }
+
+  req.on("data", (chunk) => {
+    if (aborted) return;
+
+    bytesReceived += chunk.length;
+    if (bytesReceived > 50 * 1024 * 1024) {
+      rejectUpload(413, "Thumbnail file too large");
+      return;
+    }
+
+    if (!writeStream.write(chunk)) {
+      req.pause();
+      writeStream.once("drain", () => req.resume());
+    }
+  });
+
+  req.on("end", () => {
+    if (aborted) return;
+    writeStream.end();
+  });
+
+  writeStream.on("finish", () => {
+    if (aborted) return;
+    queueThumbnailProcessing(videoId, uploadPath, outputPath);
+    res.status(202).json({
+      message: "Thumbnail uploaded, processing in progress",
+      videoId,
+    });
+  });
+
+  writeStream.on("error", (err) => {
+    if (!res.headersSent) res.status(500).send("Failed to save file");
+  });
+
+  req.on("error", (err) => {
+    writeStream.destroy();
+    fs.unlink(uploadPath, () => {});
+    if (!res.headersSent) res.status(400).send("Upload error");
+  });
+
+  req.on("close", () => {
+    if (!req.complete && !aborted) {
+      aborted = true;
+      writeStream.destroy();
+      fs.unlink(uploadPath, () => {});
     }
   });
 });
@@ -306,6 +449,19 @@ app.use((err, req, res, next) => {
 //
 // Execution
 //
+
+const requiredDirs = [
+  "storage/uploads/videos",
+  "storage/uploads/thumbnails",
+  "storage/videos/mp4",
+  "storage/videos/meta",
+  "storage/videos/thumbnails",
+  "storage/channels/meta",
+];
+
+requiredDirs.forEach((dir) => {
+  fs.mkdirSync(dir, { recursive: true });
+});
 
 app.listen(port, () => {
   console.log(`Running on http://localhost:${port}`);

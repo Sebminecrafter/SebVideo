@@ -13,12 +13,16 @@
         <input type="text" id="token" name="token" />
 
         <label id="videolabel" for="video">Choose a video.</label>
-        <input type="file" id="video" name="video" accept="video/mp4" />
+        <input type="file" id="video" name="video" accept="video/*" />
+
+        <label id="thumbnaillabel" for="thumbnail">Choose a thumbnail (optional).</label>
+        <input type="file" id="thumbnail" name="thumbnail" accept="image/*" />
 
         <button id="submitBtn" type="button">Upload</button>
     </div>
     <div class="uploaded-video">
         <video id="videoobj" controls></video>
+        <img id="thumbnailobj" style="display: none; max-width: 100%; margin-top: 1rem;" />
     </div>
 </div>
 
