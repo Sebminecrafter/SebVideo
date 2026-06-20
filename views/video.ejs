@@ -3,14 +3,37 @@ name = details.name;
 author = details.author;
 description = details.description;
 page = name;
+videourl = "/api/getVideo?id=" + details.id;
+thumbnail = "/api/thumbnail?id=" + details.id;
+views = 1;
+var date = new Date(details.date);
+uploadDate = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+max = 30;
 %>
 <%- include('partials/header') %>
 
 <div class="video">
-    <video src="/api/getVideo?id=<%= details.id %>" poster="/api/thumbnail?id=<%= details.id %>" preload="auto" controls></video>
-    <h1><%= name %></h1>
-    <h3><%= author %></h3>
-    <p><%= description %></p>
+    <video src="<%= videourl %>" poster="<%= thumbnail %>" preload="auto" controls></video>
+    <div class="videobar">
+        <h1 id="title"><%= name %></h1>
+        <a id="download" href="<%= videourl %>" download="<%= name %>.mp4">Download</a>
+    </div>
+    <div class="channelbar">
+        <img id="icon" src="" alt="Channel Logo">
+        <h3 id="name"><%= author %></h3>
+    </div>
+    <details class="description">
+        <summary>
+            <%= views.toLocaleString() %> view<% if (views != 1) { %>s<% } %>
+            <strong><%= uploadDate %></strong>
+            <div class="preview"><%= description.slice(0, max) %>&hellip;</div>
+            <span class="toggle">
+                <span class="label-more">Show more</span>
+                <span class="label-less">Show less</span>
+            </span>
+        </summary>
+        <p><%= description %></p>
+    </details>
 </div>
 <div class="riverview">
     <% for( let index = 0; index < recommended.length; index++ ) { %>

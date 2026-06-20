@@ -4,6 +4,8 @@
 const express = require("express");
 const ejs = require("ejs");
 const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
 const { isNumberObject } = require("util/types");
 
 const app = express();
@@ -26,6 +28,11 @@ function defaultDetails(id) {
     similar: [],
   };
 }
+
+const UPLOAD_DIR = path.join(__dirname, "storage/videos/");
+const MAX_SIZE = 2048 * 1024 * 1024; // 2G max
+
+const sebtoken = "seb";
 
 //
 // Functions
@@ -64,6 +71,14 @@ function getVideoDetails(id) {
     return parsed;
   }
   return defaultDetails(id);
+}
+
+function checkAuth(req, res, next) {
+  const token = req.headers["authorization"]?.replace("Bearer ", "");
+  if (!token || token !== sebtoken) {
+    return res.status(401).send("Unauthorized");
+  }
+  next();
 }
 
 //
@@ -129,14 +144,85 @@ app.get("/api/details", (req, res, next) => {
   res.send(getVideoDetails(id));
 });
 
-app.post("/api/upload", (req, res, next) => {
-  let body = JSON.parse(req.body);
+app.post("/api/upload", checkAuth, (req, res) => {
+  // Pull metadata from headers (and/or query params)
+  const name = req.headers["x-video-name"];
+  const description = req.headers["x-video-description"] || "";
 
-  let nextId = 0;
+  if (!name) {
+    return res.status(400).send("Missing X-Video-Name header");
+  }
+  if (req.headers["content-type"] !== "video/mp4") {
+    return res.status(415).send("Expected Content-Type: video/mp4");
+  }
+
+  let nextId = 1;
   while (true) {
     if (!videoExists(nextId, null)) break;
     nextId++;
   }
+  const id = nextId;
+
+  const filePath = path.join(UPLOAD_DIR, `/mp4/${id}.mp4`);
+  const filePathMeta = path.join(UPLOAD_DIR, `/meta/${id}.json`);
+
+  const writeStream = fs.createWriteStream(filePath);
+  let bytesReceived = 0;
+  let aborted = false;
+
+  req.on("data", (chunk) => {
+    bytesReceived += chunk.length;
+    if (bytesReceived > MAX_SIZE && !aborted) {
+      aborted = true;
+      req.unpipe(writeStream);
+      writeStream.destroy();
+      fs.unlink(filePath, () => {});
+      res.status(413).send("File too large");
+      req.destroy();
+    }
+  });
+
+  req.pipe(writeStream);
+
+  writeStream.on("finish", () => {
+    if (aborted) return;
+    let metadata = {
+      name: name,
+      author: sebtoken,
+      description: description,
+      date: Date.now(),
+      similar: [],
+    };
+    let jsonFile = JSON.stringify(metadata);
+    fs.writeFile(filePathMeta, jsonFile, (err) => {
+      if (err) return res.status(500).send("Failed to save metadata file!");
+      res.status(200).json({
+        message: "Upload received",
+        name,
+        description,
+        size: bytesReceived,
+      });
+    });
+  });
+
+  writeStream.on("error", (err) => {
+    if (!res.headersSent) res.status(500).send("Failed to save file");
+  });
+
+  req.on("error", (err) => {
+    writeStream.destroy();
+    fs.unlink(filePath, () => {});
+    if (!res.headersSent) res.status(400).send("Upload error");
+  });
+
+  // Disconnect or end
+  req.on("close", () => {
+    if (!req.complete && !aborted) {
+      aborted = true;
+      writeStream.destroy();
+      fs.unlink(filePath, () => {});
+    }
+  });
 });
 
 //
