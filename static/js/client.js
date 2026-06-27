@@ -11,7 +11,7 @@ function getCookie(name) {
 function themeRefresh() {
   let theme = getCookie("theme") || "light";
   document.body.className = theme;
-  $("toggletheme").textContent = theme == "light" ? "☀︎" : "⏾";
+  $("toggletheme").textContent = theme == "light" ? "☀︎" : "☾";
 }
 
 function toggleTheme() {

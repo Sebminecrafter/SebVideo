@@ -121,7 +121,7 @@ let conversionQueue = [];
 let activeConversions = 0;
 const MAX_CONCURRENT = 3;
 
-// Detect best available hardware encoder supported by ffmpeg (if any)
+// Detect the best available hardware encoder supported by ffmpeg (if any)
 function detectHardwareEncoder() {
   try {
     const encoders = execSync("ffmpeg -hide_banner -encoders", {
@@ -129,21 +129,71 @@ function detectHardwareEncoder() {
       stdio: ["ignore", "pipe", "ignore"],
       timeout: 10000,
     });
-    // Priority: NVENC (NVIDIA), QSV (Intel), VAAPI (Linux GPU), AMF (AMD)
-    if (encoders.includes("h264_nvenc") || encoders.includes("hevc_nvenc")) {
-      return {
-        codec: encoders.includes("h264_nvenc") ? "h264_nvenc" : "hevc_nvenc",
-        hwaccel: "cuda",
-      };
+
+    let gpuVendor = null;
+    try {
+      const gpuInfo = execSync(
+        process.platform === "win32"
+          ? "wmic path win32_VideoController get name 2>nul"
+          : "lspci 2>/dev/null | grep -iE 'vga|3d|display' || true",
+        {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+          timeout: 10000,
+        },
+      );
+      const normalizedGpu = gpuInfo.toLowerCase();
+      if (
+        normalizedGpu.includes("nvidia") ||
+        normalizedGpu.includes("geforce") ||
+        normalizedGpu.includes("quadro")
+      ) {
+        gpuVendor = "nvidia";
+      } else if (
+        normalizedGpu.includes("amd") ||
+        normalizedGpu.includes("radeon") ||
+        normalizedGpu.includes("vega")
+      ) {
+        gpuVendor = "amd";
+      } else if (normalizedGpu.includes("intel")) {
+        gpuVendor = "intel";
+      }
+    } catch (e) {
+      // Fall back to encoder availability when GPU probing is unavailable
     }
-    if (encoders.includes("h264_qsv")) {
+
+    // Prefer AMD/Windows AMF before NVENC to avoid choosing NVIDIA-only encoders
+    // on AMD systems that do not support them.
+    if (encoders.includes("h264_amf") && (gpuVendor === "amd" || process.platform === "win32")) {
+      return { codec: "h264_amf", hwaccel: "dxva2" };
+    }
+    if (encoders.includes("h264_qsv") && (gpuVendor === "intel" || process.platform === "win32")) {
       return { codec: "h264_qsv", hwaccel: "qsv" };
     }
     if (encoders.includes("h264_vaapi")) {
       return { codec: "h264_vaapi", hwaccel: "vaapi" };
     }
+    if (
+      (encoders.includes("h264_nvenc") || encoders.includes("hevc_nvenc")) &&
+      gpuVendor === "nvidia"
+    ) {
+      return {
+        codec: encoders.includes("h264_nvenc") ? "h264_nvenc" : "hevc_nvenc",
+        hwaccel: "cuda",
+      };
+    }
+
     if (encoders.includes("h264_amf")) {
       return { codec: "h264_amf", hwaccel: "dxva2" };
+    }
+    if (encoders.includes("h264_qsv")) {
+      return { codec: "h264_qsv", hwaccel: "qsv" };
+    }
+    if (encoders.includes("h264_nvenc") || encoders.includes("hevc_nvenc")) {
+      return {
+        codec: encoders.includes("h264_nvenc") ? "h264_nvenc" : "hevc_nvenc",
+        hwaccel: "cuda",
+      };
     }
   } catch (e) {
     // If ffmpeg isn't available in PATH or command fails, fall back to software
